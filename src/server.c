@@ -60,6 +60,15 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
     ///////////////////
 
     // Send it all!
+    int response_length = sprintf(response,
+            "%s\n"
+            "Content-Type: %s\n"
+            "Content-Length: %s\n"
+            "Connection: close\n"
+            "%s\n"
+            "\n",
+            header,content_type,content_length, body
+    );
     int rv = send(fd, response, response_length, 0);
 
     if (rv < 0) {
@@ -144,7 +153,8 @@ void handle_http_request(int fd, struct cache *cache)
 {
     const int request_buffer_size = 65536; // 64K
     char request[request_buffer_size];
-
+    char *handle;
+    char *endpoint;
     // Read request
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
 
@@ -159,15 +169,19 @@ void handle_http_request(int fd, struct cache *cache)
     ///////////////////
 
     // Read the first two components of the first line of the request 
- 
-    // If GET, handle the get endpoints
+    ssanf(request, "%s %s", handle, endpoint);
+    if(strcmp(handle, "GET")==0){
+        if(strcmp(endpoint, "/d20")==0){
+            get_d20(fd);
+        }
+        else{
+            get_file(fd,cache,endpoint);
+        }
+    }
+    else{
+        resp_404(fd);
+    }
 
-    //    Check if it's /d20 and handle that special case
-    //    Otherwise serve the requested file by calling get_file()
-
-
-    // (Stretch) If POST, handle the post request
-}
 
 /**
  * Main
@@ -182,7 +196,6 @@ int main(void)
 
     // Get a listening socket
     int listenfd = get_listener_socket(PORT);
-
     if (listenfd < 0) {
         fprintf(stderr, "webserver: fatal error getting listening socket\n");
         exit(1);
