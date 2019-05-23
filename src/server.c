@@ -52,24 +52,9 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
 {
     const int max_response_size = 262144;
     char response[max_response_size];
-
-    // Build HTTP response and store it in response
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
-    // Send it all!
-    int response_length = sprintf(response,
-            "%s\n"
-            "Content-Type: %s\n"
-            "Content-Length: %s\n"
-            "Connection: close\n"
-            "%s\n"
-            "\n",
-            header,content_type,content_length, body
-    );
-    int rv = send(fd, response, response_length, 0);
+    int response_length = sprintf(response, "%s\nContent-Type: %s\nContent-Length: %d\nConnection: close\n\n", header, content_type, content_length);
+    memcpy(response+response_length, body, content_length);
+    int rv = send(fd, response, response_length+content_length, 0);
 
     if (rv < 0) {
         perror("send");
@@ -84,17 +69,10 @@ int send_response(int fd, char *header, char *content_type, void *body, int cont
  */
 void get_d20(int fd)
 {
-    // Generate a random number between 1 and 20 inclusive
-    
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
-    // Use send_response() to send it back as text/plain data
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    int r = rand() % 20;
+    char res[20];
+    sprintf(res, "%d\n", r);
+    send_response(fd,"HTTP/1.1 200 SUCCESS\n","TEXT/PLAIN\n",res,strlen(res));
 }
 
 /**
@@ -105,13 +83,10 @@ void resp_404(int fd)
     char filepath[4096];
     struct file_data *filedata; 
     char *mime_type;
-
-    // Fetch the 404.html file
     snprintf(filepath, sizeof filepath, "%s/404.html", SERVER_FILES);
     filedata = file_load(filepath);
 
     if (filedata == NULL) {
-        // TODO: make this non-fatal
         fprintf(stderr, "cannot find system 404 file\n");
         exit(3);
     }
@@ -128,9 +103,18 @@ void resp_404(int fd)
  */
 void get_file(int fd, struct cache *cache, char *request_path)
 {
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
+    char filepath[4096];
+    struct file_data *filedata;
+    (void)cache;
+    snprintf(filepath, sizeof filepath, "%s%s", SERVER_ROOT, request_path);
+    filedata = file_load(filepath);
+    if (filedata == NULL){
+        resp_404(fd);
+        return;
+    }
+    char *mime_type = mime_type_get(filepath);
+    send_response(fd, "HTTP/1.1 200 OK", mime_type, filedata->data, filedata->size);
+    file_free(filedata);
 }
 
 /**
@@ -138,38 +122,30 @@ void get_file(int fd, struct cache *cache, char *request_path)
  * 
  * "Newlines" in HTTP can be \r\n (carriage return followed by newline) or \n
  * (newline) or \r (carriage return).
- */
-char *find_start_of_body(char *header)
-{
-    ///////////////////
-    // IMPLEMENT ME! // (Stretch)
-    ///////////////////
-}
+//  */
+// char *find_start_of_body(char *header)
+// {
+//     ///////////////////
+//     // IMPLEMENT ME! // (Stretch)
+//     ///////////////////
+// }
 
 /**
  * Handle HTTP request and send response
  */
 void handle_http_request(int fd, struct cache *cache)
 {
-    const int request_buffer_size = 65536; // 64K
+    const int request_buffer_size = 65536; 
     char request[request_buffer_size];
-    char *handle;
-    char *endpoint;
-    // Read request
+    char handle[100];
+    char endpoint[100];
     int bytes_recvd = recv(fd, request, request_buffer_size - 1, 0);
 
     if (bytes_recvd < 0) {
         perror("recv");
         return;
     }
-
-
-    ///////////////////
-    // IMPLEMENT ME! //
-    ///////////////////
-
-    // Read the first two components of the first line of the request 
-    ssanf(request, "%s %s", handle, endpoint);
+    sscanf(request, "%s %s", handle, endpoint);
     if(strcmp(handle, "GET")==0){
         if(strcmp(endpoint, "/d20")==0){
             get_d20(fd);
@@ -182,12 +158,13 @@ void handle_http_request(int fd, struct cache *cache)
         resp_404(fd);
     }
 
-
+}
 /**
  * Main
  */
 int main(void)
 {
+
     int newfd;  // listen on sock_fd, new connection on newfd
     struct sockaddr_storage their_addr; // connector's address information
     char s[INET6_ADDRSTRLEN];
